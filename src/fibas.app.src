@@ -1,0 +1,17 @@
+{application, fibas, [
+    {description, "Fibonacci as a Service"},
+    {vsn, "0.1.0"},
+    {registered, []},
+    {mod, {fibas_app, []}},
+    {applications, [
+        kernel,
+        stdlib,
+        cowboy,
+        recon
+    ]},
+    {env, [
+        {http_port, 8080}
+    ]},
+    {modules, []},
+    {links, []}
+]}.
