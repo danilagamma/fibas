@@ -4,7 +4,9 @@
     routes/0,
     init/2,
     allowed_methods/2,
+    content_types_accepted/2,
     content_types_provided/2,
+    delete_resource/2,
     handle_request/2
 ]).
 
@@ -13,28 +15,53 @@
 -define(DEFAULT_PAGE_SIZE, 100).
 -define(PAGE_SIZE_LIMIT,   100).
 
+-spec routes() ->
+    [cowboy_router:route()].
 routes() ->
     [
         {'_', [
-            {"/fib/:index",      ?MODULE, #{api => number}},
-            {"/fib/:index/list", ?MODULE, #{api => list}}
+            {"/fib/:index",           ?MODULE, #{api => number}},
+            {"/fib/:index/list",      ?MODULE, #{api => list}},
+            {"/fib/:index/blacklist", ?MODULE, #{api => blacklist}}
         ]}
     ].
 
+-spec init(cowboy_req:req(), map()) ->
+    {cowboy_rest, cowboy_req:req(), map()}.
 init(Req, Opts) ->
     {cowboy_rest, Req, Opts}.
 
+-spec allowed_methods(cowboy_req:req(), map()) ->
+    {[cowboy:method()], cowboy_req:req(), map()}.
 allowed_methods(Req, State) ->
-    {[<<"GET">>], Req, State}.
+    {[<<"GET">>, <<"PUT">>, <<"DELETE">>], Req, State}.
 
+-spec content_types_accepted(cowboy_req:req(), map()) ->
+    {[{atom(), atom()}], cowboy_req:req(), map()}.
+content_types_accepted(Req, State) ->
+    {[{'*', handle_request}], Req, State}.
+
+-spec content_types_provided(cowboy_req:req(), map()) ->
+    {[{binary(), atom()}], cowboy_req:req(), map()}.
 content_types_provided(Req, State) ->
     {[{<<"application/json">>, handle_request}], Req, State}.
 
+-spec delete_resource(cowboy_req:req(), map()) ->
+    {true | iodata(), cowboy_req:req(), map()}.
+delete_resource(Req, State) ->
+    handle_request(Req, State).
+
+-spec handle_request(cowboy_req:req(), map()) ->
+    {true | iodata() | stop, cowboy_req:req(), map()}.
 handle_request(Req, State) ->
     Fun = case cowboy_req:method(Req) of
-              <<"GET">> -> fun get/2
+              <<"GET">>    -> fun get/2;
+              <<"PUT">>    -> fun put/2;
+              <<"DELETE">> -> fun delete/2
           end,
     try Fun(Req, State) of
+        ok ->
+            {true, Req, State};
         {ok, Result} ->
             {jiffy:encode(Result), Req, State};
         {error, StatusCode, Reason} ->
@@ -58,6 +85,18 @@ get(Req, #{api := list}) ->
     EndIndex   = get_index_binding(Req),
     {ok, fibas_api:list(StartIndex, EndIndex, PageSize)};
 get(_Req, _State) ->
+    {error, 404, <<"path_not_found">>}.
+
+put(Req, #{api := blacklist}) ->
+    Index = get_index_binding(Req),
+    ok = fibas_api:blacklist_index(Index);
+put(_Req, _State) ->
+    {error, 404, <<"path_not_found">>}.
+
+delete(Req, #{api := blacklist}) ->
+    Index = get_index_binding(Req),
+    ok = fibas_api:whitelist_index(Index);
+delete(_Req, _State) ->
     {error, 404, <<"path_not_found">>}.
 
 get_index_binding(Req) ->
